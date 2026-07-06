@@ -1,16 +1,23 @@
-# This is a sample Python script.
-
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from status import progress
+import time
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+def main():
+    large_number = 50_000_000
+    for _ in progress(
+        range(large_number),
+        bar_length=20,
+        min_interval=0.1,
+        description='[One billion loop]',
+        text_color='red',
+        bar_color='green',
+        description_color='red',
+        separator=' | ',
+        description_separator=': '
+    ):
+
+        pass
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    main()
