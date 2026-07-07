@@ -16,58 +16,82 @@ COLORS = {
 
 
 class Bar:
-    BAR_LEVELS = ' ▏▎▍▌▋▊▉█'
+    UNICODE_LEVELS = ' ▏▎▍▌▋▊▉█'
+    ASCII_LEVELS = '-123456789#'
 
-    def __init__(self, fraction, length, *, color=None):
+    def __init__(self, fraction, length, *, color=None, ascii=None):
         self.fraction = fraction
         self.length = length
         self.color = color
+        self.ascii = ascii
 
     def __str__(self):
-        fraction = self.fraction
         length = self. length
-        bar_levels = self.BAR_LEVELS
-        num_levels = len(bar_levels) - 1
-        filled = fraction * length * num_levels
-        full, partial = divmod(int(filled), num_levels)
+        levels = self.ASCII_LEVELS if self.ascii else self.UNICODE_LEVELS
+        num_levels = len(levels) - 1
+        filled = int(self.fraction * length * num_levels)
+        full, partial = divmod(filled, num_levels)
 
-        bar = bar_levels[-1] * full
-
+        bar = levels[-1] * full
         if full < length:
-            bar += bar_levels[partial]
-            bar += bar_levels[0] * (length - full - 1)
+            bar += levels[partial]
+        bar += levels[0] * (length - len(bar))
 
         return f'{self.color}[{bar}]{COLOR_RESET}'
 
 
 class Progress:
+    # def __init__(
+    #         self, iterable, *, file=None, min_iters=0, min_interval=0.1,
+    #         bar_length=10, bar_color=None, text_color=None, description_color=None,
+    #         description=None, separator=' ', description_separator=': '
+    # ):
     def __init__(
-            self, iterable, *, file=None, min_iters=0, min_interval=0.1,
-            bar_length=10, bar_color=None, text_color=None, description_color=None,
-            description=None, separator=' ', description_separator=': '
+            self, iterable, *, total=None, start=0, file=sys.stderr, description=None,
+            bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
+            show_count=True, color=None, bar_color=None, min_iters=1, min_interval=0.1,
+            max_interval=10.0, unit='items', ascii=False, separator=' ', disable=False
     ):
         if file is None:
             file = sys.stderr
 
-        if description is None:
-            description = ''
-
         self.iterable = iterable
+        self.total = total
+        self.current_index = start
+
         self.file = file
+
+        self.description = '' if description is None else description
         self.bar_length = bar_length
+        self.show_bar = show_bar
+        self.show_percent = show_percent
+        self.show_eta = show_eta
+        self.show_elapsed = show_elapsed
+        self.show_count = show_count
+
+        self.color = '' if color is None else COLORS[color.upper()]
+        self.bar_color = '' if bar_color is None else COLORS[bar_color.upper()]
+
         self.min_iters = min_iters
         self.min_interval = min_interval
+        self.max_interval = max_interval
 
-        self.bar_color = COLORS[bar_color.upper()] if bar_color else ''
-        self.text_color = COLORS[text_color.upper()] if text_color else ''
-        self.description_color = COLORS[description_color.upper()] if description_color else ''
+        self.unit = unit
+        self.ascii = ascii
+        self.separator = separator
 
-        self.description = description
+        self.disable = disable
 
-        self.separator = f'{self.text_color}{separator}{COLOR_RESET}'
-        self.description_separator = f'{self.description_color}{description_separator}{COLOR_RESET}'
 
-        self.current_index = 0
+        # self.bar_color = COLORS[bar_color.upper()] if bar_color else ''
+        # self.text_color = COLORS[text_color.upper()] if text_color else ''
+        # self.description_color = COLORS[description_color.upper()] if description_color else ''
+        #
+        # self.description = description
+        #
+        # self.separator = f'{self.text_color}{separator}{COLOR_RESET}'
+        # self.description_separator = f'{self.description_color}{description_separator}{COLOR_RESET}'
+
         self.last_update_index = 0
         self.last_update_time = 0
         self.elapsed_time = 0
@@ -77,31 +101,31 @@ class Progress:
         total = len(self.iterable)
         min_iters = self.min_iters
         min_interval = self.min_interval
+        max_interval = self.max_interval
+
         start_time = perf_counter()
 
         for item in iterable:
             yield item
             self.current_index += 1
 
-            # not enough index passed
-            if self.current_index - self.last_update_index < min_iters:
+            current_time = perf_counter()
+            delta_time = current_time - self.last_update_time
+            force_update = delta_time >= max_interval or self.current_index == total
+            self.elapsed_time = current_time - start_time
+
+            # not enough indices passed
+            if self.current_index - self.last_update_index < min_iters and not force_update:
                 continue
 
             # not enough time passed
-            current_time = perf_counter()
-            delta_time = current_time - self.last_update_time
-            self.elapsed_time = current_time - start_time
-
-            if delta_time < min_interval:
+            if delta_time < min_interval and not force_update:
                 continue
 
             self.update(self.current_index / total)
 
             self.last_update_index = self.current_index
             self.last_update_time = current_time
-
-        self.elapsed_time = perf_counter() - start_time
-        self.update()
 
     def update(self, fraction=1.0):
         file = self.file
@@ -113,23 +137,21 @@ class Progress:
 
     def format_text(self, fraction):
         total = len(self.iterable)
-        current_index = self.current_index
-        bar_length = self.bar_length
-        text_color = self.text_color
-        desc_color = self.description_color
-        sep = self.separator
-        desc_sep = self.description_separator
-        seconds = self.elapsed_time
+        seperator = self.separator
 
-        bar = Bar(fraction, bar_length, color=self.bar_color)
+        parts = []
 
-        description = f'{desc_color}{self.description}{COLOR_RESET}'
-        percent = f'{(fraction * 100):.1f}%'
-        percent_text = f'{text_color}{percent:<7}{COLOR_RESET}'
-        progress_text = f'{text_color}{current_index:,}/{total:,}{COLOR_RESET}'
-        elapsed_text = self.format_time(seconds)
+        if self.show_bar:
+            bar = Bar(fraction, self.bar_length, color=self.bar_color, ascii=self.ascii)
+            parts.append(f'{bar}')
+        if self.show_percent:
+            parts.append(f'{fraction * 100:.1f}%'.ljust(6))
+        if self.show_count:
+            parts.append(f'{self.current_index:,}/{total:,} {self.unit}')
+        if self.show_elapsed:
+            parts.append(self.format_time(self.elapsed_time))
 
-        return f'\r{description}{desc_sep}{percent_text}{sep}{bar}{sep}{progress_text}{sep}{elapsed_text}'
+        return f'\r{self.color}{self.description}: {seperator.join(parts)}{COLOR_RESET}'
 
     def format_time(self, seconds):
         if seconds < 1:
@@ -148,20 +170,15 @@ class Progress:
 
 
 def progress(
-        iterable, *, file=None, min_iters=0, min_interval=0.1,
-        bar_length=10, bar_color=None, text_color=None, description_color=None,
-        description=None, separator=' ', description_separator=': '
+        iterable, *, total=None, start=0, file=sys.stderr, description=None,
+        bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
+        show_count=True, color=None, bar_color=None, min_iters=1, min_interval=0.1,
+        max_interval=10.0, unit='items', ascii=False, separator=' ', disable=False
 ):
     return Progress(
-        iterable,
-        file=file,
-        min_iters=min_iters,
-        min_interval=min_interval,
-        bar_length=bar_length,
-        bar_color=bar_color,
-        text_color=text_color,
-        description_color=description_color,
-        description=description,
-        separator=separator,
-        description_separator=description_separator
+        iterable=iterable, total=total, start=start, file=file, description=description,
+        bar_length=bar_length, show_bar=show_bar, show_percent=show_percent, show_eta=show_eta,
+        show_elapsed=show_elapsed, show_count=show_count, color=color, bar_color=bar_color,
+        min_iters=min_iters, min_interval=min_interval, max_interval=max_interval, unit=unit,
+        ascii=ascii, separator=separator, disable=disable,
     )
