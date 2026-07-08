@@ -116,40 +116,41 @@ class Progress:
             return
 
         n = self.current_index
-        last_update_index = n
+        last_update_n = n
         min_iters = self.min_iters
+        dynamic_min_iters = self.dynamic_min_iters
         min_interval = self.min_interval
         last_update_time = self.last_update_time
-        counter = min_iters
+        counter = 0
 
         for item in self.iterable:
             yield item
-            counter -= 1
+            counter += 1
 
-            if counter > 0:
+            if counter < min_iters:
                 continue
 
-            n += min_iters
+            n += counter
+            counter = 0
 
             current_time = perf_counter()
             delta_time = current_time - last_update_time
 
             # not enough time passed
             if delta_time < min_interval:
-                min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
-                counter = min_iters
+                if dynamic_min_iters:
+                    min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
                 continue
 
-            self.update(min_iters, current_time)
+            self.update(n - last_update_n, current_time)
 
             last_update_time = current_time
-            last_update_index = n
-            counter = min_iters
+            last_update_n = n
 
         # update remaining
-        n += min_iters - counter
-        if last_update_index < n:
-            self.update(n - last_update_index)
+        n += counter
+        if last_update_n < n:
+            self.update(n - last_update_n)
 
         if self.leave:
             self.write('\n')

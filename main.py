@@ -5,11 +5,13 @@ import time
 
 def main():
     large_number = 500_00_000
+    a = 0
     for _ in progress(
         range(large_number),
         color='red',
+        # min_iters=5_000_000
     ):
-        pass
+        a -= 1
         # time.sleep(0.00001)
 
 
