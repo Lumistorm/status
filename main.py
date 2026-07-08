@@ -1,4 +1,5 @@
 from status import progress
+from tqdm import tqdm
 import time
 
 
@@ -6,17 +7,23 @@ def main():
     large_number = 50_000_000
     for _ in progress(
         range(large_number),
-        bar_length=20,
-        min_interval=0.1,
-        min_iters=5_000_000,
-        description='[One billion loop]',
         color='red',
-        bar_color='green',
-        separator=' | ',
+        # min_iters=0.1
     ):
 
         pass
 
 
 if __name__ == '__main__':
-    main()
+    import cProfile
+    import pstats
+
+    cProfile.run(
+        "main()",
+        "profile.stats"
+    )
+
+    stats = pstats.Stats("profile.stats")
+
+    stats.sort_stats("cumulative")
+    stats.print_stats(20)

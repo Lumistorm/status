@@ -1,6 +1,6 @@
 import sys
-from time import perf_counter
-from traceback import format_tb
+from time import time as perf_counter
+
 
 COLOR_RESET = '\x1b[0m'
 COLORS = {
@@ -19,17 +19,24 @@ ASCII_LEVELS = '-123456789#'
 
 
 class Progress:
+    __slots__ = (
+        'iterable', 'total', 'current_index', 'file', 'description',
+        'bar_length', 'show_bar', 'show_percent', 'show_eta', 'show_elapsed',
+        'show_count', 'color', 'bar_color', 'min_iters', 'min_interval',
+        'max_interval', 'unit', 'ascii', 'separator', 'disable', 'leave',
+        'start_time', 'last_update_time', 'elapsed_time', 'bar_levels',
+        'write', 'flush',
+    )
+
     def __init__(
             self, iterable, *, total=None, start=0, file=sys.stderr, description=None,
             bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
-            show_count=True, color=None, bar_color=None, min_iters=1, min_interval=0.1,
-            max_interval=10.0, unit='items', ascii=False, separator=' ', disable=False,
+            show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
+            unit='items', ascii=False, separator=' ', disable=False,
             leave=True
     ):
         if file is None:
             file = sys.stderr
-
-        self.iterable = iterable
 
         if total is None:
             try:
@@ -37,32 +44,56 @@ class Progress:
             except TypeError:
                 total = None
 
-        self.total = total
-
         if total is None:
-            self.current_index = max(0, start)
+            current_index = max(0, start)
 
         else:
-            self.current_index = min(max(0, start), total)
+            current_index = min(max(0, start), total)
+
+        if description is None:
+            description = ''
+        else:
+            description = f'{description}: '
+
+        if color is None:
+            color = ''
+        else:
+            color = COLORS.get(color.upper(), '')
+
+        if bar_color is None:
+            bar_color = ''
+        else:
+            bar_color = COLORS.get(bar_color.upper(), '')
+
+        if min_iters is None:
+            min_iters = 0
+            dynamic_min_iters = True
+        else:
+            dynamic_min_iters = False
 
         self.file = file
+        self.write = file.write
+        self.flush = file.flush
 
-        description = '' if description is None else description
-        self.description = f'{description}: '
+        self.iterable = iterable
+        self.total = total
+        self.current_index = current_index
 
+        self.description = description
         self.bar_length = bar_length
+
         self.show_bar = show_bar
         self.show_percent = show_percent
         self.show_eta = show_eta
         self.show_elapsed = show_elapsed
         self.show_count = show_count
 
-        self.color = '' if color is None else COLORS.get(color.upper(), '')
-        self.bar_color = '' if bar_color is None else COLORS.get(bar_color.upper(), '')
+        self.color = color
+        self.bar_color = bar_color
 
         self.min_iters = min_iters
+        self.dynamic_min_iters = dynamic_min_iters
         self.min_interval = min_interval
-        self.max_interval = max_interval
 
         self.unit = unit
         self.ascii = ascii
@@ -71,7 +102,6 @@ class Progress:
         self.disable = disable
         self.leave = leave
 
-        self.last_update_index = 0
         self.start_time = perf_counter()
         self.last_update_time = self.start_time
         self.elapsed_time = 0
@@ -85,51 +115,65 @@ class Progress:
             yield from self.iterable
             return
 
-        current_index = self.current_index
+        n = self.current_index
+        last_update_index = n
+        min_iters = self.min_iters
+        min_interval = self.min_interval
+        last_update_time = self.last_update_time
+        counter = min_iters
 
         for item in self.iterable:
             yield item
+            counter -= 1
 
-            current_index += 1
-            delta_time = perf_counter() - self.last_update_time
-            force_update = delta_time >= self.max_interval or current_index == self.total
-
-            # not enough indices passed
-            indices_passed = current_index - self.last_update_index
-
-            if indices_passed < self.min_iters and not force_update:
+            if counter > 0:
                 continue
+
+            n += min_iters
+
+            current_time = perf_counter()
+            delta_time = current_time - last_update_time
 
             # not enough time passed
-            if delta_time < self.min_interval and not force_update:
+            if delta_time < min_interval:
+                min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
+                counter = min_iters
                 continue
 
-            self.update(indices_passed)
+            self.update(min_iters, current_time)
+
+            last_update_time = current_time
+            last_update_index = n
+            counter = min_iters
+
+        # update remaining
+        n += min_iters - counter
+        if last_update_index < n:
+            self.update(n - last_update_index)
 
         if self.leave:
-            self.file.write('\n')
+            self.write('\n')
         else:
-            self.file.write(f'\r{PREFIX}')
+            self.write(f'\r{PREFIX}')
 
-        self.file.flush()
+        self.flush()
 
-    def update(self, n=1):
+    def update(self, n=1, current_time=None):
         if self.disable:
             return
 
-        current_time = perf_counter()
-        self.current_index += n
-        self.last_update_index += n
-        self.last_update_time = perf_counter()
-        self.elapsed_time = current_time - self.start_time
+        if current_time is None:
+            current_time = perf_counter()
 
-        file = self.file
+        self.current_index += n
+        self.last_update_time = current_time
+        self.elapsed_time = current_time - self.start_time
 
         fraction = (self.current_index / self.total) if self.total else 0.0
         text = self.format_text(fraction)
 
-        file.write(text)
-        file.flush()
+        self.write(text)
+        self.flush()
 
     def format_text(self, fraction):
         total = self.total
@@ -155,13 +199,13 @@ class Progress:
                 parts.append(f'{current_index:,}/{total:,} {unit}')
 
         if self.show_elapsed:
-            parts.append(self.format_time(elapsed))
+            parts.append(self.format_time(elapsed, precision=1))
 
         if self.show_eta and 0 < fraction < 1:
             remaining_time = (elapsed / fraction) - elapsed
             parts.append(f'ETA: {self.format_time(remaining_time, min_unit='s')}')
 
-        return f'\r{PREFIX}{self.color}{self.description}: {separator.join(parts)}{COLOR_RESET}'
+        return f'\r{PREFIX}{self.color}{self.description}{separator.join(parts)}{COLOR_RESET}'
 
     def format_bar(self, fraction):
         length = self.bar_length
@@ -180,11 +224,14 @@ class Progress:
 
         return f'[{bar}]'
 
-    def format_time(self, seconds, *, min_unit='ms'):
+    @staticmethod
+    def format_time(seconds, *, min_unit='ms', precision=0):
+        precision = f'.{precision}f'
+
         if seconds < 1 and min_unit == 'ms':
-            return f'{seconds * 1000:.0f}ms'
+            return f'{seconds * 1000:{precision}}ms'
         if seconds < 60:
-            return f'{seconds:.1f}s'
+            return f'{seconds:{precision}}s'
 
         # more than 60 seconds
         minutes, seconds = divmod(seconds, 60)
@@ -213,6 +260,6 @@ def progress(
         iterable=iterable, total=total, start=start, file=file, description=description,
         bar_length=bar_length, show_bar=show_bar, show_percent=show_percent, show_eta=show_eta,
         show_elapsed=show_elapsed, show_count=show_count, color=color, bar_color=bar_color,
-        min_iters=min_iters, min_interval=min_interval, max_interval=max_interval, unit=unit,
-        ascii=ascii, separator=separator, disable=disable, leave=leave,
+        min_iters=min_iters, min_interval=min_interval, unit=unit, ascii=ascii,
+        separator=separator, disable=disable, leave=leave,
     )
