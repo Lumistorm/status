@@ -4,14 +4,13 @@ import time
 
 
 def main():
-    large_number = 50_000_000
+    large_number = 500_00_000
     for _ in progress(
         range(large_number),
         color='red',
-        # min_iters=0.1
     ):
-
         pass
+        # time.sleep(0.00001)
 
 
 if __name__ == '__main__':
