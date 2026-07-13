@@ -1,1 +1,1 @@
-from .ui import progress
+from .progress import progress
