@@ -115,6 +115,7 @@ class Progress:
             yield from self.iterable
             return
 
+        iterable = self.iterable
         n = self.current_index
         last_update_n = n
         min_iters = self.min_iters
@@ -123,7 +124,7 @@ class Progress:
         last_update_time = self.last_update_time
         counter = 0
 
-        for item in self.iterable:
+        for item in iterable:
             yield item
             counter += 1
 
@@ -253,7 +254,7 @@ class Progress:
 def progress(
         iterable, *, total=None, start=0, file=sys.stderr, description=None,
         bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
-        show_count=True, color=None, bar_color=None, min_iters=1, min_interval=0.1,
+        show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
         unit='items', ascii=False, separator=' ', disable=False, leave=True,
 ):
     return Progress(
