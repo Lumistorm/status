@@ -22,8 +22,8 @@ class Progress:
     __slots__ = (
         'iterable', 'total', 'current_index', 'file', 'write', 'flush',
         'description', 'bar_length', 'show_bar', 'show_percent', 'show_eta',
-        'show_elapsed', 'show_count', 'color', 'bar_color', 'min_iters',
-        'dynamic_min_iters', 'min_interval', 'max_interval', 'unit', 'ascii',
+        'show_elapsed', 'show_count', '_color', '_bar_color',
+        'min_iters', 'dynamic_min_iters', 'min_interval', 'unit', 'ascii',
         'separator', 'disable', 'leave', 'start_time', 'last_update_time',
         'elapsed_time', 'bar_levels',
     )
@@ -54,16 +54,6 @@ class Progress:
             description = ''
         else:
             description = f'{description}: '
-
-        if color is None:
-            color = ''
-        else:
-            color = COLORS.get(color.upper(), '')
-
-        if bar_color is None:
-            bar_color = ''
-        else:
-            bar_color = COLORS.get(bar_color.upper(), '')
 
         if min_iters is None:
             min_iters = 0
@@ -109,6 +99,22 @@ class Progress:
         self.bar_levels = ASCII_LEVELS if self.ascii else UNICODE_LEVELS
 
         self.update(0)
+
+    @property
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, value):
+        self._color = '' if value is None else COLORS.get(value.upper(), '')
+
+    @property
+    def bar_color(self):
+        return self._bar_color
+
+    @bar_color.setter
+    def bar_color(self, value):
+        self._bar_color = '' if value is None else COLORS.get(value.upper(), '')
 
     def __iter__(self):
         if self.disable:
@@ -184,7 +190,7 @@ class Progress:
         unit = self.unit
         elapsed = self.elapsed_time
 
-        parts = []
+        parts = [self.description]
 
         if total is not None:
             if self.show_bar:
@@ -207,7 +213,7 @@ class Progress:
             remaining_time = (elapsed / fraction) - elapsed
             parts.append(f'ETA: {self.format_time(remaining_time, min_unit='s')}')
 
-        return f'\r{PREFIX}{self.color}{self.description}{separator.join(parts)}{COLOR_RESET}'
+        return f'\r{PREFIX}{self._color}{separator.join(parts)}{COLOR_RESET}'
 
     def format_bar(self, fraction):
         length = self.bar_length
@@ -221,10 +227,7 @@ class Progress:
             bar += levels[partial]
         bar += levels[0] * (length - len(bar))
 
-        if self.bar_color:
-            return f'{self.bar_color}[{bar}]{COLOR_RESET}'
-
-        return f'[{bar}]'
+        return f'{self._bar_color}[{bar}]{self._color}'
 
     @staticmethod
     def format_time(seconds, *, min_unit='ms', precision=0):
