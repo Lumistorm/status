@@ -22,17 +22,17 @@ class Progress:
     __slots__ = (
         'iterable', 'total', 'current_index', 'file', 'write', 'flush',
         'description', 'bar_length', 'show_bar', 'show_percent', 'show_eta',
-        'show_elapsed', 'show_count', '_color', '_bar_color',
-        'min_iters', 'dynamic_min_iters', 'min_interval', 'unit', 'ascii',
-        'separator', 'disable', 'leave', 'start_time', 'last_update_time',
-        'elapsed_time', 'bar_levels',
+        'show_elapsed', 'show_count', '_color', '_bar_color', 'min_iters',
+        'dynamic_min_iters', 'min_interval', 'unit', 'ascii', 'separator',
+        'disable', 'leave', 'start_time', 'last_update_time', 'elapsed_time',
+        'bar_levels',
     )
 
     def __init__(
             self, iterable, *, total=None, start=0, file=sys.stderr, description=None,
             bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
             show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
-            unit='items', ascii=False, separator=' ', disable=False,
+            unit='it', ascii=False, separator=' ', disable=False,
             leave=True
     ):
         if file is None:
@@ -258,7 +258,7 @@ def progress(
         iterable, *, total=None, start=0, file=sys.stderr, description=None,
         bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
         show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
-        unit='items', ascii=False, separator=' ', disable=False, leave=True,
+        unit='it', ascii=False, separator=' ', disable=False, leave=True,
 ):
     return Progress(
         iterable=iterable, total=total, start=start, file=file, description=description,
