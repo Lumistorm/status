@@ -13,7 +13,7 @@ COLORS = {
     'CYAN': '\x1b[36m',
     'WHITE': '\x1b[37m',
 }
-PREFIX = '\x1b[K'
+CLEAR_LINE = '\x1b[2K\r'
 UNICODE_LEVELS = ' ▏▎▍▌▋▊▉█'
 ASCII_LEVELS = '-123456789#'
 
@@ -25,7 +25,7 @@ class Progress:
         'show_elapsed', 'show_count', '_color', '_bar_color', 'min_iters',
         'dynamic_min_iters', 'min_interval', 'unit', 'ascii', 'separator',
         'disable', 'leave', 'start_time', 'last_update_time', 'elapsed_time',
-        'bar_levels',
+        'bar_levels', 'text',
     )
 
     def __init__(
@@ -98,6 +98,8 @@ class Progress:
 
         self.bar_levels = ASCII_LEVELS if self.ascii else UNICODE_LEVELS
 
+        self.text = ''
+
         self.update(0)
 
     @property
@@ -162,7 +164,7 @@ class Progress:
         if self.leave:
             self.write('\n')
         else:
-            self.write(f'\r{PREFIX}')
+            self.write(CLEAR_LINE)
 
         self.flush()
 
@@ -178,9 +180,16 @@ class Progress:
         self.elapsed_time = current_time - self.start_time
 
         fraction = (self.current_index / self.total) if self.total else 0.0
-        text = self.format_text(fraction)
+        self.text = self.format_text(fraction)
 
-        self.write(text)
+        self.write(self.text)
+        self.flush()
+
+    def info(self, message):
+        self.write(f'{CLEAR_LINE}{message}\n')
+
+        if self.text:
+            self.write(self.text)
         self.flush()
 
     def format_text(self, fraction):
@@ -213,7 +222,7 @@ class Progress:
             remaining_time = (elapsed / fraction) - elapsed
             parts.append(f'ETA: {self.format_time(remaining_time, min_unit='s')}')
 
-        return f'\r{PREFIX}{self._color}{separator.join(parts)}{COLOR_RESET}'
+        return f'\r{CLEAR_LINE}{self._color}{separator.join(parts)}{COLOR_RESET}'
 
     def format_bar(self, fraction):
         length = self.bar_length
@@ -239,19 +248,19 @@ class Progress:
             return f'{seconds:{precision}}s'
 
         # more than 60 seconds
-        minutes, seconds = divmod(seconds, 60)
+        minutes, seconds = divmod(int(seconds), 60)
         if minutes < 60:
             if min_unit == 'min':
-                return f'{int(minutes)}m'
+                return f'{minutes}m'
 
-            return f'{int(minutes)}m {int(seconds):02d}s'
+            return f'{minutes}m {seconds:02d}s'
 
         # more than 60 minutes
         hours, minutes = divmod(minutes, 60)
         if min_unit == 'h':
-            return f'{int(hours)}h'
+            return f'{hours}h'
 
-        return f'{int(hours)}h {int(minutes):02d}m'
+        return f'{hours}h {minutes:02d}m'
 
 
 def progress(
