@@ -25,7 +25,7 @@ class Progress:
         'show_elapsed', 'show_count', '_text_color', '_bar_color', 'min_iters',
         'dynamic_min_iters', 'min_interval', 'unit', 'use_ascii', 'separator',
         'disable', 'leave', 'start_time', 'last_update_time', 'elapsed_time',
-        'bar_levels', 'text',
+        'bar_levels', 'text', 'use_chunks', 'bar_levels_max_index',
     )
 
     def __init__(
@@ -56,7 +56,7 @@ class Progress:
             description = f'{description}: '
 
         if min_iters is None:
-            min_iters = 1
+            min_iters = 0
             dynamic_min_iters = True
         else:
             dynamic_min_iters = False
@@ -98,6 +98,7 @@ class Progress:
         self.elapsed_time = 0
 
         self.bar_levels = ASCII_LEVELS if self.use_ascii else UNICODE_LEVELS
+        self.bar_levels_max_index = len(self.bar_levels) - 1
 
         self.text = ''
 
@@ -156,7 +157,7 @@ class Progress:
                 if iters_since_chunk < chunk_size:
                     continue
 
-                accumulated_iters += chunk_size
+                accumulated_iters += iters_since_chunk
                 iters_since_chunk = 0
 
                 if accumulated_iters < min_iters:
@@ -290,7 +291,7 @@ class Progress:
     def format_bar(self, fraction):
         length = self.bar_length
         levels = self.bar_levels
-        num_levels = len(levels) - 1
+        num_levels = self.bar_levels_max_index
         filled = int(fraction * length * num_levels)
         full, partial = divmod(filled, num_levels)
 
