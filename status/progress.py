@@ -1,5 +1,5 @@
 import sys
-from time import time as perf_counter
+from time import perf_counter
 
 
 COLOR_RESET = '\x1b[0m'
@@ -20,10 +20,10 @@ ASCII_LEVELS = '-123456789#'
 
 class Progress:
     __slots__ = (
-        'iterable', 'total', 'current_index', 'file', 'write', 'flush',
+        'iterable', 'total', 'current_index', 'file',
         'description', 'bar_length', 'show_bar', 'show_percent', 'show_eta',
-        'show_elapsed', 'show_count', '_color', '_bar_color', 'min_iters',
-        'dynamic_min_iters', 'min_interval', 'unit', 'ascii', 'separator',
+        'show_elapsed', 'show_count', '_text_color', '_bar_color', 'min_iters',
+        'dynamic_min_iters', 'min_interval', 'unit', 'use_ascii', 'separator',
         'disable', 'leave', 'start_time', 'last_update_time', 'elapsed_time',
         'bar_levels', 'text',
     )
@@ -31,8 +31,8 @@ class Progress:
     def __init__(
             self, iterable, *, total=None, start=0, file=sys.stderr, description=None,
             bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
-            show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
-            unit='it', ascii=False, separator=' ', disable=False,
+            show_count=True, text_color=None, bar_color=None, min_iters=None, min_interval=0.1,
+            unit='it', use_ascii=False, separator=' ', disable=False,
             leave=True
     ):
         if file is None:
@@ -56,14 +56,14 @@ class Progress:
             description = f'{description}: '
 
         if min_iters is None:
-            min_iters = 0
+            min_iters = 1
             dynamic_min_iters = True
         else:
             dynamic_min_iters = False
 
+        use_chunks = dynamic_min_iters or min_iters > 256
+
         self.file = file
-        self.write = file.write
-        self.flush = file.flush
 
         self.iterable = iterable
         self.total = total
@@ -78,15 +78,16 @@ class Progress:
         self.show_elapsed = show_elapsed
         self.show_count = show_count
 
-        self.color = color
+        self.text_color = text_color
         self.bar_color = bar_color
 
         self.min_iters = min_iters
         self.dynamic_min_iters = dynamic_min_iters
         self.min_interval = min_interval
+        self.use_chunks = use_chunks
 
         self.unit = unit
-        self.ascii = ascii
+        self.use_ascii = use_ascii
         self.separator = separator
 
         self.disable = disable
@@ -96,19 +97,19 @@ class Progress:
         self.last_update_time = self.start_time
         self.elapsed_time = 0
 
-        self.bar_levels = ASCII_LEVELS if self.ascii else UNICODE_LEVELS
+        self.bar_levels = ASCII_LEVELS if self.use_ascii else UNICODE_LEVELS
 
         self.text = ''
 
         self.update(0)
 
     @property
-    def color(self):
-        return self._color
+    def text_color(self):
+        return self._text_color
 
-    @color.setter
-    def color(self, value):
-        self._color = '' if value is None else COLORS.get(value.upper(), '')
+    @text_color.setter
+    def text_color(self, value):
+        self._text_color = '' if value is None else COLORS.get(value.upper(), '')
 
     @property
     def bar_color(self):
@@ -129,44 +130,91 @@ class Progress:
         min_iters = self.min_iters
         dynamic_min_iters = self.dynamic_min_iters
         min_interval = self.min_interval
+        use_chunks = self.use_chunks
         last_update_time = self.last_update_time
-        counter = 0
 
-        for item in iterable:
-            yield item
-            counter += 1
+        # Upper boundary of CPython's small integer cache
 
-            if counter < min_iters:
-                continue
+        accumulated_iters = 0
 
-            n += counter
-            counter = 0
+        update = self.update
+        time = perf_counter
 
-            current_time = perf_counter()
-            delta_time = current_time - last_update_time
+        if use_chunks:
+            small_int_max = 256
+            iters_since_chunk = 0
+            chunk_size = min(small_int_max, min_iters)
 
-            # not enough time passed
-            if delta_time < min_interval:
-                if dynamic_min_iters:
-                    min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
-                continue
+            for item in iterable:
+                yield item
 
-            self.update(n - last_update_n, current_time)
+                # Use chunks to keep integer comparison under 256
+                # to take advantage of CPython cached int -5 - 256
 
-            last_update_time = current_time
-            last_update_n = n
+                iters_since_chunk += 1
+
+                if iters_since_chunk < chunk_size:
+                    continue
+
+                accumulated_iters += chunk_size
+                iters_since_chunk = 0
+
+                if accumulated_iters < min_iters:
+                    chunk_size = min(small_int_max, min_iters - accumulated_iters)
+                    continue
+
+                n += accumulated_iters
+                accumulated_iters = 0
+
+                current_time = time()
+                delta_time = current_time - last_update_time
+
+                # not enough time passed
+                if delta_time < min_interval:
+                    if dynamic_min_iters:
+                        min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
+                    chunk_size = min(small_int_max, min_iters)
+                    continue
+
+                update(n - last_update_n, current_time)
+
+                chunk_size = min(small_int_max, min_iters)
+                last_update_time = current_time
+                last_update_n = n
+
+            accumulated_iters += iters_since_chunk
+        else:
+            for item in iterable:
+                yield item
+
+                accumulated_iters += 1
+
+                if accumulated_iters < min_iters:
+                    continue
+
+                n += accumulated_iters
+                accumulated_iters = 0
+
+                current_time = time()
+                delta_time = current_time - last_update_time
+
+                # not enough time passed
+                if delta_time < min_interval:
+                    if dynamic_min_iters:
+                        min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
+                    continue
+
+                update(n - last_update_n, current_time)
+
+                last_update_time = current_time
+                last_update_n = n
 
         # update remaining
-        n += counter
+        n += accumulated_iters
         if last_update_n < n:
-            self.update(n - last_update_n)
+            update(n - last_update_n)
 
-        if self.leave:
-            self.write('\n')
-        else:
-            self.write(CLEAR_LINE)
-
-        self.flush()
+        self.close()
 
     def update(self, n=1, current_time=None):
         if self.disable:
@@ -182,15 +230,31 @@ class Progress:
         fraction = (self.current_index / self.total) if self.total else 0.0
         self.text = self.format_text(fraction)
 
-        self.write(self.text)
-        self.flush()
+        self.refresh()
 
-    def info(self, message):
-        self.write(f'{CLEAR_LINE}{message}\n')
+    def refresh(self):
+        text = self.text
 
-        if self.text:
-            self.write(self.text)
-        self.flush()
+        if text:
+            file = self.file
+            file.write(text)
+            file.flush()
+
+    def write(self, message):
+        file = self.file
+
+        file.write(f'{CLEAR_LINE}{message}\n')
+        self.refresh()
+
+    def close(self):
+        file = self.file
+
+        if self.leave:
+            file.write('\n')
+        else:
+            file.write(CLEAR_LINE)
+
+        file.flush()
 
     def format_text(self, fraction):
         total = self.total
@@ -203,8 +267,7 @@ class Progress:
 
         if total is not None:
             if self.show_bar:
-                bar = self.format_bar(fraction)
-                parts.append(f'{bar}')
+                parts.append(self.format_bar(fraction))
 
             if self.show_percent:
                 parts.append(f'{fraction * 100:.1f}%'.ljust(6))
@@ -222,7 +285,7 @@ class Progress:
             remaining_time = (elapsed / fraction) - elapsed
             parts.append(f'ETA: {self.format_time(remaining_time, min_unit='s')}')
 
-        return f'\r{CLEAR_LINE}{self._color}{separator.join(parts)}{COLOR_RESET}'
+        return f'{CLEAR_LINE}{self._text_color}{separator.join(parts)}{COLOR_RESET}'
 
     def format_bar(self, fraction):
         length = self.bar_length
@@ -236,7 +299,7 @@ class Progress:
             bar += levels[partial]
         bar += levels[0] * (length - len(bar))
 
-        return f'{self._bar_color}[{bar}]{self._color}'
+        return f'{self._bar_color}[{bar}]{self._text_color}'
 
     @staticmethod
     def format_time(seconds, *, min_unit='ms', precision=0):
@@ -266,13 +329,13 @@ class Progress:
 def progress(
         iterable, *, total=None, start=0, file=sys.stderr, description=None,
         bar_length=10, show_bar=True, show_percent=True, show_eta=True, show_elapsed=True,
-        show_count=True, color=None, bar_color=None, min_iters=None, min_interval=0.1,
-        unit='it', ascii=False, separator=' ', disable=False, leave=True,
+        show_count=True, text_color=None, bar_color=None, min_iters=None, min_interval=0.1,
+        unit='it', use_ascii=False, separator=' ', disable=False, leave=True,
 ):
     return Progress(
         iterable=iterable, total=total, start=start, file=file, description=description,
         bar_length=bar_length, show_bar=show_bar, show_percent=show_percent, show_eta=show_eta,
-        show_elapsed=show_elapsed, show_count=show_count, color=color, bar_color=bar_color,
-        min_iters=min_iters, min_interval=min_interval, unit=unit, ascii=ascii,
+        show_elapsed=show_elapsed, show_count=show_count, text_color=text_color, bar_color=bar_color,
+        min_iters=min_iters, min_interval=min_interval, unit=unit, use_ascii=use_ascii,
         separator=separator, disable=disable, leave=leave,
     )

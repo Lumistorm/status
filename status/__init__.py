@@ -1,1 +1,1 @@
-from .progress import progress
+from .progress import progress, Progress
