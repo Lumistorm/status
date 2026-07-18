@@ -134,88 +134,87 @@ class Progress:
         use_chunks = self.use_chunks
         last_update_time = self.last_update_time
 
-        # Upper boundary of CPython's small integer cache
-
         accumulated_iters = 0
+        iters_since_chunk = 0
 
         update = self.update
         time = perf_counter
 
-        if use_chunks:
-            small_int_max = 256
-            iters_since_chunk = 0
-            chunk_size = min(small_int_max, min_iters)
+        try:
+            if use_chunks:
 
-            for item in iterable:
-                yield item
-
-                # Use chunks to keep integer comparison under 256
-                # to take advantage of CPython cached int -5 - 256
-
-                iters_since_chunk += 1
-
-                if iters_since_chunk < chunk_size:
-                    continue
-
-                accumulated_iters += iters_since_chunk
-                iters_since_chunk = 0
-
-                if accumulated_iters < min_iters:
-                    chunk_size = min(small_int_max, min_iters - accumulated_iters)
-                    continue
-
-                n += accumulated_iters
-                accumulated_iters = 0
-
-                current_time = time()
-                delta_time = current_time - last_update_time
-
-                # not enough time passed
-                if delta_time < min_interval:
-                    if dynamic_min_iters:
-                        min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
-                    chunk_size = min(small_int_max, min_iters)
-                    continue
-
-                update(n - last_update_n, current_time)
-
+                # Upper boundary of CPython's small integer cache
+                small_int_max = 256
                 chunk_size = min(small_int_max, min_iters)
-                last_update_time = current_time
-                last_update_n = n
 
-            accumulated_iters += iters_since_chunk
-        else:
-            for item in iterable:
-                yield item
+                for item in iterable:
+                    yield item
 
-                accumulated_iters += 1
+                    # Use chunks to keep integer comparison under 256
+                    # to take advantage of CPython cached int -5 - 256
 
-                if accumulated_iters < min_iters:
-                    continue
+                    iters_since_chunk += 1
 
-                n += accumulated_iters
-                accumulated_iters = 0
+                    if iters_since_chunk < chunk_size:
+                        continue
 
-                current_time = time()
-                delta_time = current_time - last_update_time
+                    accumulated_iters += iters_since_chunk
+                    iters_since_chunk = 0
 
-                # not enough time passed
-                if delta_time < min_interval:
-                    if dynamic_min_iters:
-                        min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
-                    continue
+                    if accumulated_iters < min_iters:
+                        chunk_size = min(small_int_max, min_iters - accumulated_iters)
+                        continue
 
-                update(n - last_update_n, current_time)
+                    n += accumulated_iters
+                    accumulated_iters = 0
 
-                last_update_time = current_time
-                last_update_n = n
+                    current_time = time()
+                    delta_time = current_time - last_update_time
 
-        # update remaining
-        n += accumulated_iters
-        if last_update_n < n:
-            update(n - last_update_n)
+                    # not enough time passed
+                    if delta_time < min_interval:
+                        if dynamic_min_iters:
+                            min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
+                        chunk_size = min(small_int_max, min_iters)
+                        continue
 
-        self.close()
+                    update(n - last_update_n, current_time)
+
+                    chunk_size = min(small_int_max, min_iters)
+                    last_update_time = current_time
+                    last_update_n = n
+            else:
+                for item in iterable:
+                    yield item
+
+                    accumulated_iters += 1
+
+                    if accumulated_iters < min_iters:
+                        continue
+
+                    n += accumulated_iters
+                    accumulated_iters = 0
+
+                    current_time = time()
+                    delta_time = current_time - last_update_time
+
+                    # not enough time passed
+                    if delta_time < min_interval:
+                        if dynamic_min_iters:
+                            min_iters = max(min_iters + 1, int(min_iters * (min_interval / delta_time)))
+                        continue
+
+                    update(n - last_update_n, current_time)
+
+                    last_update_time = current_time
+                    last_update_n = n
+        finally:
+            # update remaining
+            n += accumulated_iters
+            if last_update_n < n:
+                update(n - last_update_n)
+
+            self.close()
 
     def update(self, n=1, current_time=None):
         if self.disable:
@@ -242,6 +241,9 @@ class Progress:
             file.flush()
 
     def write(self, message):
+        if self.disable:
+            return
+
         file = self.file
 
         file.write(f'{CLEAR_LINE}{message}\n')
@@ -264,7 +266,7 @@ class Progress:
         unit = self.unit
         elapsed = self.elapsed_time
 
-        parts = [self.description]
+        parts = []
 
         if total is not None:
             if self.show_bar:
@@ -286,7 +288,7 @@ class Progress:
             remaining_time = (elapsed / fraction) - elapsed
             parts.append(f'ETA: {self.format_time(remaining_time, min_unit='s')}')
 
-        return f'{CLEAR_LINE}{self._text_color}{separator.join(parts)}{COLOR_RESET}'
+        return f'{CLEAR_LINE}{self._text_color}{self.description}{separator.join(parts)}{COLOR_RESET}'
 
     def format_bar(self, fraction):
         length = self.bar_length
