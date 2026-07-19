@@ -11,16 +11,4 @@ def main():
 
 
 if __name__ == '__main__':
-    import dis
-    dis.dis(Progress.__iter__)
-    # import cProfile
-    # from pstats import Stats
-    #
-    # pr = cProfile.Profile()
-    # pr.enable()
-    #
-    # main()
-    #
-    # pr.disable()
-    # stats = Stats(pr)
-    # stats.sort_stats('tottime').print_stats(10)
+    main()
