@@ -25,7 +25,8 @@ class Progress:
         'show_elapsed', 'show_count', '_text_color', '_bar_color', 'min_iters',
         'dynamic_min_iters', 'min_interval', 'unit', 'use_ascii', 'separator',
         'disable', 'leave', 'start_time', 'last_update_time', 'elapsed_time',
-        'bar_levels', 'text', 'use_chunks', 'bar_levels_max_index',
+        '_bar_levels', 'text', 'use_chunks', '_bar_levels_max_index', '_bar_cache',
+        '_bar_cache_filled',
     )
 
     def __init__(
@@ -97,8 +98,10 @@ class Progress:
         self.last_update_time = self.start_time
         self.elapsed_time = 0
 
-        self.bar_levels = ASCII_LEVELS if self.use_ascii else UNICODE_LEVELS
-        self.bar_levels_max_index = len(self.bar_levels) - 1
+        self._bar_levels = ASCII_LEVELS if self.use_ascii else UNICODE_LEVELS
+        self._bar_levels_max_index = len(self._bar_levels) - 1
+        self._bar_cache = ''
+        self._bar_cache_filled = -1
 
         self.text = ''
 
@@ -292,17 +295,22 @@ class Progress:
 
     def format_bar(self, fraction):
         length = self.bar_length
-        levels = self.bar_levels
-        num_levels = self.bar_levels_max_index
+        levels = self._bar_levels
+        num_levels = self._bar_levels_max_index
         filled = int(fraction * length * num_levels)
-        full, partial = divmod(filled, num_levels)
 
-        bar = levels[-1] * full
-        if full < length:
-            bar += levels[partial]
-        bar += levels[0] * (length - len(bar))
+        if filled != self._bar_cache_filled:
+            full, partial = divmod(filled, num_levels)
 
-        return f'{self._bar_color}[{bar}]{self._text_color}'
+            bar = levels[-1] * full
+            if full < length:
+                bar += levels[partial]
+            bar += levels[0] * (length - len(bar))
+
+            self._bar_cache_filled = filled
+            self._bar_cache = bar
+
+        return f'{self._bar_color}[{self._bar_cache}]{self._text_color}'
 
     @staticmethod
     def format_time(seconds, *, min_unit='ms', precision=0):
