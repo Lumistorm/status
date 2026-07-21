@@ -213,7 +213,7 @@ class Progress:
                     last_update_n = n
         finally:
             # update remaining
-            n += accumulated_iters
+            n += accumulated_iters + iters_since_chunk
             if last_update_n < n:
                 update(n - last_update_n)
 
