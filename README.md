@@ -12,3 +12,12 @@ import time
 
 for _ in Progress(range(100), description='Processing'):
     pass
+```
+
+Output:
+
+```
+Processing |████████████████████████████████| 100% | 100/100 | ETA 0s | 2.0 it/s
+```
+Processing: [██████████] 100.0% 100/100 it 0.0ms
+```
